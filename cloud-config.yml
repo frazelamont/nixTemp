@@ -1,0 +1,62 @@
+#cloud-config
+
+# how you access this on the network
+
+hostname: "nixbox"
+
+# The ssh_authorized_keys parameter adds public SSH keys which will be authorized for the core user.
+#   generate this using putty
+
+ssh_authorized_keys:
+  - "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAtSsOlgG7YApL6TjJI+GduVpAI+QKizmPTWBZOZ8p6PX8NtAEa3MWGBq9QwIk1eso0gqJ9yZsgTVs68v44svKBE9f4cuicV6P5Nws0gArmO4+ZrXUSJa4FXO0cy1HD//Y/fM7fUyk9mRkAPteYXRyh7pkcVLJctOuIHqR6QyoSdc0Xqxlu52l32uDgcyGGQtWnwuRZq8y/PukOblBx/ahHKvQUZkNCV/d/TeJTzmkeHv7cQ7ALzdINKaWPuxYLHwwjEcHrOM1oIAMEqUmuZTgLfMkuYruNP5LNpxjyPfxMHpXyARqvM2UT/9TfD9ejpnPXHNVV9W3fGCW1tc+dfSeDQ== rsa-key-20170220"
+
+coreos:
+
+# reboot-strategy: One of "reboot", "etcd-lock", "best-effort" or "off" for controlling when reboots are issued after an update is performed.
+#  reboot: Reboot immediately after an update is applied.
+#   etcd-lock: Reboot after first taking a distributed lock in etcd, this guarantees that only one host will reboot concurrently and that the cluster will remain available during the update.
+#   best-effort - If etcd is running, "etcd-lock", otherwise simply "reboot".
+#   off - Disable rebooting after updates are applied (not recommended).
+
+  update:
+    reboot-strategy: "etcd-lock"
+
+# Each item is an object with the following fields:
+#   name: String representing unit's name. Required.
+#   runtime: Boolean indicating whether or not to persist the unit across reboots. This is analogous to the --runtime argument to systemctl enable. The default value is false.
+#   enable: Boolean indicating whether or not to handle the [Install] section of the unit file. This is similar to running systemctl enable <name>. The default value is false.
+#   content: Plaintext string representing entire unit file. If no value is provided, the unit is assumed to exist already.
+#   command: Command to execute on unit: start, stop, reload, restart, try-restart, reload-or-restart, reload-or-try-restart. The default behavior is to not execute any commands.
+#   mask: Whether to mask the unit file by symlinking it to /dev/null (analogous to systemctl mask <name>). Note that unlike systemctl mask, this will destructively remove any existing unit file located at /etc/systemd/system/<unit>, to ensure that the mask succeeds. The default value is false.
+#   drop-ins: A list of unit drop-ins with the following fields:
+#     name: String representing unit's name. Required.
+#     content: Plaintext string representing entire file. Required.
+
+  units:
+    - name: "etcd2.service"       
+      command: "start"
+    - name: "fleet.service"
+      command: "start"
+    - name: flanneld.service
+      command: "start"
+    - name: static.network
+      content: |
+        [Match]
+        Name=ens3
+
+# generate a new token for each unique cluster from https://discovery.etcd.io/new?size=3
+# multi-region and multi-cloud deployments need to use $public_ipv4
+# etcd -> etcd2 listen on both the official ports and the legacy ports
+# etcd -> etcd2 legacy ports can be omitted if your application doesn't depend on them
+
+  etcd2:  
+    discovery: "https://discovery.etcd.io/<token>"    
+    advertise-client-urls: "http://$public_ipv4:2379"
+    initial-advertise-peer-urls: "http://$private_ipv4:2380"    
+    listen-client-urls: "http://0.0.0.0:2379,http://0.0.0.0:4001"
+    listen-peer-urls: "http://$private_ipv4:2380,http://$private_ipv4:7001"
+
+# further documentation - https://coreos.com/fleet/docs/latest/deployment-and-configuration.html#configuration
+
+  fleet:
+      public-ip: "$public_ipv4"
